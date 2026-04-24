@@ -2,12 +2,7 @@ import { useMemo } from "react";
 import { useAppSelector } from "./useRedux";
 import type { Expense } from "@/types/expense";
 
-/**
- * Applies all active Redux filters to the expense list.
- *
- * Filters: category, month, search text, minAmount, maxAmount.
- * Returns the matching expenses and their count.
- */
+
 export function useFilteredExpenses(): {
     filteredExpenses: Expense[];
     count: number;

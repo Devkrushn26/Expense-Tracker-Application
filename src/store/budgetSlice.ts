@@ -1,9 +1,7 @@
 import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit";
 import type { MonthlyBudget } from "@/types/expense";
 
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
+
 
 interface BudgetState {
     budgets: MonthlyBudget[];
@@ -15,9 +13,9 @@ const initialState: BudgetState = {
     status: "idle",
 };
 
-// ---------------------------------------------------------------------------
+
 // Async Thunks
-// ---------------------------------------------------------------------------
+
 
 /** GET /api/budget?month=YYYY-MM */
 export const fetchBudget = createAsyncThunk(
@@ -51,9 +49,11 @@ export const setBudget = createAsyncThunk(
     }
 );
 
-// ---------------------------------------------------------------------------
+
+
+
 // Slice
-// ---------------------------------------------------------------------------
+
 
 const budgetSlice = createSlice({
     name: "budget",
@@ -82,7 +82,7 @@ const budgetSlice = createSlice({
                 state.status = "failed";
             });
 
-        // setBudget
+
         builder
             .addCase(setBudget.pending, (state) => {
                 state.status = "loading";

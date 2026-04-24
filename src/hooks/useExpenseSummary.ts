@@ -13,12 +13,7 @@ const ALL_CATEGORIES: ExpenseCategory[] = [
     "other",
 ];
 
-/**
- * Computes spending summary for a given month.
- *
- * @param month - e.g. "2025-01"
- * @returns fully typed ExpenseSummary
- */
+
 export function useExpenseSummary(month: string): ExpenseSummary {
     const expenses = useAppSelector((state) => state.expenses.expenses);
     const budgets = useAppSelector((state) => state.budget.budgets);

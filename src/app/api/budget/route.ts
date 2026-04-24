@@ -3,9 +3,7 @@ import type { MonthlyBudget } from "@/types/expense";
 import { getBudgets, isValidMonth } from "@/lib/data";
 
 // GET /api/budget
-// Returns the MonthlyBudget for ?month=YYYY-MM.
-// Returns { amount: 0 } if no budget is set for that month.
-// Without ?month, returns all budgets.
+
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const month = searchParams.get("month");
@@ -19,15 +17,13 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/budget
-// Accepts { month: string, amount: number }.
-// Creates or replaces the budget for that month.
-// Returns the updated MonthlyBudget.
+
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const { month, amount } = body;
 
-        // --- Validation ---
+       
         const errors: string[] = [];
 
         if (!month || typeof month !== "string" || !isValidMonth(month)) {
@@ -42,7 +38,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ errors }, { status: 400 });
         }
 
-        // --- Upsert budget ---
+      
         const budgets = getBudgets();
         const existing = budgets.findIndex((b) => b.month === month);
 
@@ -65,3 +61,25 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+
+// DELETE /api/budget?month=YYYY-MM
+
+export async function DELETE(request: NextRequest) {
+    const { searchParams } = new URL(request.url);
+    const month = searchParams.get("month");
+
+    if (!month || !isValidMonth(month)) {
+        return NextResponse.json({ error: "month query param must be YYYY-MM" }, { status: 400 });
+    }
+
+    const budgets = getBudgets();
+    const idx = budgets.findIndex((b) => b.month === month);
+
+    if (idx === -1) {
+        return NextResponse.json({ error: "Budget not found" }, { status: 404 });
+    }
+
+    budgets.splice(idx, 1);
+    return NextResponse.json({ message: "Budget deleted" });
+}
+

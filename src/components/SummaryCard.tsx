@@ -9,6 +9,7 @@ interface SummaryCardProps {
 
 const TREND_CONFIG = {
     up: { arrow: "↑", color: "#ef4444", bg: "rgba(239, 68, 68, 0.1)" },
+    
     down: { arrow: "↓", color: "#10b981", bg: "rgba(16, 185, 129, 0.1)" },
     neutral: { arrow: "→", color: "#64748b", bg: "rgba(100, 116, 139, 0.1)" },
 };

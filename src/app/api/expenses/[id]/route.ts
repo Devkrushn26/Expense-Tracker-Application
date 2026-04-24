@@ -6,7 +6,7 @@ interface RouteContext {
 }
 
 // GET /api/expenses/[id]
-// Returns a single expense. Returns 404 if not found.
+
 export async function GET(_request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const expense = getExpenses().find((e) => e.id === id);
@@ -19,8 +19,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 // PUT /api/expenses/[id]
-// Merges the partial body with the existing expense.
-// Returns the updated Expense.
+
 export async function PUT(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const expenses = getExpenses();
@@ -53,7 +52,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 }
 
 // DELETE /api/expenses/[id]
-// Removes the expense. Returns { message: "Expense deleted" }.
+
 export async function DELETE(_request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const expenses = getExpenses();

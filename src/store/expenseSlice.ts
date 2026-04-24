@@ -1,9 +1,7 @@
 import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit";
 import type { Expense, ExpenseFilters } from "@/types/expense";
 
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
+
 
 interface ExpenseState {
     expenses: Expense[];
@@ -29,9 +27,8 @@ const initialState: ExpenseState = {
     error: null,
 };
 
-// ---------------------------------------------------------------------------
+
 // Async Thunks
-// ---------------------------------------------------------------------------
 
 /** GET /api/expenses → dispatches setExpenses */
 export const fetchExpenses = createAsyncThunk(
@@ -58,6 +55,8 @@ export const fetchExpenses = createAsyncThunk(
         }
     }
 );
+
+
 
 /** POST /api/expenses → dispatches addExpense */
 export const createExpense = createAsyncThunk(

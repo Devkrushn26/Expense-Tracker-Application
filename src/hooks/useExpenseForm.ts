@@ -1,13 +1,13 @@
 import { useCallback, useState } from "react";
 import type { Expense, ExpenseCategory } from "@/types/expense";
 
-// ---------------------------------------------------------------------------
+
 // Types
-// ---------------------------------------------------------------------------
+
 
 interface ExpenseFormValues {
     title: string;
-    amount: string; // kept as string for input binding; converted to cents on submit
+    amount: string; 
     category: ExpenseCategory;
     date: string;
     note: string;
@@ -39,9 +39,9 @@ interface UseExpenseFormReturn {
     reset: () => void;
 }
 
-// ---------------------------------------------------------------------------
+
 // Allowed categories (for validation)
-// ---------------------------------------------------------------------------
+
 
 const VALID_CATEGORIES: ExpenseCategory[] = [
     "food",
@@ -56,9 +56,8 @@ const VALID_CATEGORIES: ExpenseCategory[] = [
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
-// ---------------------------------------------------------------------------
+
 // Hook
-// ---------------------------------------------------------------------------
 
 export function useExpenseForm(
     initialValues?: Partial<Expense>
