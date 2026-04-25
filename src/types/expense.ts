@@ -11,7 +11,7 @@ export type ExpenseCategory =
 export interface Expense {
     id: string;
     title: string;
-    amount: number; // in cents (to avoid floating-point issues)
+    amount: number; // stored as USD amount
     category: ExpenseCategory;
     date: string; // ISO date string YYYY-MM-DD
     note?: string;
@@ -20,7 +20,7 @@ export interface Expense {
 
 export interface MonthlyBudget {
     month: string; // "YYYY-MM"
-    amount: number; // in cents
+    amount: number; // stored as USD amount
 }
 
 export interface ExpenseFilters {

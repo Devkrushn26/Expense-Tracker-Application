@@ -4,7 +4,6 @@ import {
     createContext,
     useCallback,
     useContext,
-    useEffect,
     useState,
     type ReactNode,
 } from "react";
@@ -17,9 +16,10 @@ interface CurrencyContextValue {
     currency: Currency;
     setCurrency: (c: Currency) => void;
  
-    formatAmount: (cents: number) => string;
+    formatAmount: (usdAmount: number) => string;
 
-    toUsdCents: (localValue: number) => number;
+    toUsdAmount: (localValue: number) => number;
+    fromUsdAmount: (usdAmount: number) => number;
     currencySymbol: string;
     locale: string;
 }
@@ -42,12 +42,34 @@ const CURRENCY_SYMBOL: Record<Currency, string> = {
 
 const EXCHANGE_RATES: Record<Currency, number> = {
     USD: 1,
-    EUR: 0.92,
-    GBP: 0.79,
-    INR: 83.5,
+    EUR: 0.8531,
+    GBP: 0.7389,
+    INR: 94.2505,
 };
 
 const STORAGE_KEY = "expense-tracker-currency";
+
+function roundAmount(value: number, decimals = 6): number {
+    const factor = 10 ** decimals;
+    return Math.round(value * factor) / factor;
+}
+
+function getInitialCurrency(): Currency {
+    if (typeof window === "undefined") {
+        return "USD";
+    }
+
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY) as Currency | null;
+        if (stored && stored in CURRENCY_LOCALE) {
+            return stored;
+        }
+    } catch {
+        // Ignore storage read failures and fall back to USD.
+    }
+
+    return "USD";
+}
 
 
 // Context
@@ -58,21 +80,7 @@ const CurrencyContext = createContext<CurrencyContextValue | undefined>(
 );
 
 export function CurrencyProvider({ children }: { children: ReactNode }) {
-    const [currency, setCurrencyState] = useState<Currency>("USD");
-    const [hydrated, setHydrated] = useState(false);
-
-    
-    useEffect(() => {
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY) as Currency | null;
-            if (stored && stored in CURRENCY_LOCALE) {
-                setCurrencyState(stored);
-            }
-        } catch {
-
-        }
-        setHydrated(true);
-    }, []);
+    const [currency, setCurrencyState] = useState<Currency>(getInitialCurrency);
 
     const setCurrency = useCallback((c: Currency) => {
         setCurrencyState(c);
@@ -88,8 +96,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 
 
     const formatAmount = useCallback(
-        (cents: number): string => {
-            const usdAmount = cents / 100;
+        (usdAmount: number): string => {
             const converted = usdAmount * EXCHANGE_RATES[currency];
             return new Intl.NumberFormat(locale, {
                 style: "currency",
@@ -102,22 +109,32 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     );
 
 
-    const toUsdCents = useCallback(
+    const toUsdAmount = useCallback(
         (localValue: number): number => {
-            const usdAmount = localValue / EXCHANGE_RATES[currency];
-            return Math.round(usdAmount * 100);
+            return roundAmount(localValue / EXCHANGE_RATES[currency]);
+        },
+        [currency]
+    );
+
+    const fromUsdAmount = useCallback(
+        (usdAmount: number): number => {
+            return roundAmount(usdAmount * EXCHANGE_RATES[currency]);
         },
         [currency]
     );
 
 
-    if (!hydrated) {
-        return null;
-    }
-
     return (
         <CurrencyContext.Provider
-            value={{ currency, setCurrency, formatAmount, toUsdCents, currencySymbol, locale }}
+            value={{
+                currency,
+                setCurrency,
+                formatAmount,
+                toUsdAmount,
+                fromUsdAmount,
+                currencySymbol,
+                locale,
+            }}
         >
             {children}
         </CurrencyContext.Provider>

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ExpenseCategory } from "@/types/expense";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useExpenseForm } from "@/hooks/useExpenseForm";
 
 // ─── Category Config ──────────────────────────────────────────────────────────
 
@@ -59,13 +60,9 @@ const inputStyle: React.CSSProperties = {
 
 export default function AddExpensePage() {
     const router = useRouter();
-    const { currencySymbol, toUsdCents, currency } = useCurrency();
+    const { currencySymbol, toUsdAmount, currency } = useCurrency();
 
-    const [title, setTitle] = useState("");
-    const [amount, setAmount] = useState("");
-    const [category, setCategory] = useState<ExpenseCategory>("food");
-    const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-    const [note, setNote] = useState("");
+    const { values, errors, handleChange, handleSubmit: submitForm } = useExpenseForm();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState("");
 
@@ -75,27 +72,28 @@ export default function AddExpensePage() {
         setSubmitError("");
 
         try {
-            // Convert the user-entered local-currency value back to USD cents
-            const usdCents = toUsdCents(parseFloat(amount));
+            await submitForm(async (formData) => {
+                const usdAmount = toUsdAmount(formData.amount);
 
-            const res = await fetch("/api/expenses", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    title: title.trim(),
-                    amount: usdCents,
-                    category,
-                    date,
-                    note: note.trim() || undefined,
-                }),
+                const res = await fetch("/api/expenses", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        title: formData.title,
+                        amount: usdAmount,
+                        category: formData.category,
+                        date: formData.date,
+                        note: formData.note,
+                    }),
+                });
+
+                if (res.ok) {
+                    router.push("/expenses");
+                } else {
+                    const body = await res.json();
+                    setSubmitError(body.errors?.join(", ") || body.error || "Failed to add expense.");
+                }
             });
-
-            if (res.ok) {
-                router.push("/expenses");
-            } else {
-                const body = await res.json();
-                setSubmitError(body.errors?.join(", ") || "Failed to add expense.");
-            }
         } catch {
             setSubmitError("Network error. Please try again.");
         } finally {
@@ -103,7 +101,7 @@ export default function AddExpensePage() {
         }
     }
 
-    const cat = CATEGORY_CONFIG[category];
+    const cat = CATEGORY_CONFIG[values.category];
 
     function focusStyle(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) {
         e.target.style.borderColor = "#6366f1";
@@ -163,13 +161,18 @@ export default function AddExpensePage() {
                         <input
                             type="text"
                             required
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
+                            value={values.title}
+                            onChange={(e) => handleChange("title", e.target.value)}
                             placeholder="What did you spend on?"
                             style={inputStyle}
                             onFocus={focusStyle}
                             onBlur={blurStyle}
                         />
+                        {errors.title ? (
+                            <p style={{ color: "#f87171", fontSize: "0.78rem", marginTop: 6 }}>
+                                {errors.title}
+                            </p>
+                        ) : null}
                     </div>
 
                     {/* Amount + Date */}
@@ -189,26 +192,36 @@ export default function AddExpensePage() {
                                     required
                                     step="0.01"
                                     min="0.01"
-                                    value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
+                                    value={values.amount}
+                                    onChange={(e) => handleChange("amount", e.target.value)}
                                     placeholder="0.00"
                                     style={{ ...inputStyle, paddingLeft: 28 }}
                                     onFocus={focusStyle}
                                     onBlur={blurStyle}
                                 />
                             </div>
+                            {errors.amount ? (
+                                <p style={{ color: "#f87171", fontSize: "0.78rem", marginTop: 6 }}>
+                                    {errors.amount}
+                                </p>
+                            ) : null}
                         </div>
                         <div>
                             <FieldLabel>Date</FieldLabel>
                             <input
                                 type="date"
                                 required
-                                value={date}
-                                onChange={(e) => setDate(e.target.value)}
+                                value={values.date}
+                                onChange={(e) => handleChange("date", e.target.value)}
                                 style={{ ...inputStyle, colorScheme: "dark" }}
                                 onFocus={focusStyle}
                                 onBlur={blurStyle}
                             />
+                            {errors.date ? (
+                                <p style={{ color: "#f87171", fontSize: "0.78rem", marginTop: 6 }}>
+                                    {errors.date}
+                                </p>
+                            ) : null}
                         </div>
                     </div>
 
@@ -218,12 +231,12 @@ export default function AddExpensePage() {
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
                             {CATEGORIES.map((c) => {
                                 const cfg = CATEGORY_CONFIG[c];
-                                const selected = category === c;
+                                const selected = values.category === c;
                                 return (
                                     <button
                                         key={c}
                                         type="button"
-                                        onClick={() => setCategory(c)}
+                                        onClick={() => handleChange("category", c)}
                                         style={{
                                             display: "flex", flexDirection: "column",
                                             alignItems: "center", gap: 4,
@@ -241,14 +254,19 @@ export default function AddExpensePage() {
                                 );
                             })}
                         </div>
+                        {errors.category ? (
+                            <p style={{ color: "#f87171", fontSize: "0.78rem", marginTop: 6 }}>
+                                {errors.category}
+                            </p>
+                        ) : null}
                     </div>
 
                     {/* Note */}
                     <div style={{ marginBottom: 24 }}>
                         <FieldLabel>Note <span style={{ textTransform: "none", fontWeight: 400 }}>(optional)</span></FieldLabel>
                         <textarea
-                            value={note}
-                            onChange={(e) => setNote(e.target.value)}
+                            value={values.note}
+                            onChange={(e) => handleChange("note", e.target.value)}
                             rows={3}
                             placeholder="Add a note..."
                             style={{ ...inputStyle, resize: "vertical" }}

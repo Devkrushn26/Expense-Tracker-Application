@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { Expense, ExpenseCategory } from "@/types/expense";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useExpenseForm } from "@/hooks/useExpenseForm";
 
 // ─── Category Config ─────────────────────────────────────────────────────────
 
@@ -25,13 +26,6 @@ const CATEGORY_CONFIG: Record<
 const CATEGORIES = Object.keys(CATEGORY_CONFIG) as ExpenseCategory[];
 
 // Exchange rates (mirrors CurrencyContext — must stay in sync)
-const EXCHANGE_RATES: Record<string, number> = {
-    USD: 1,
-    EUR: 0.92,
-    GBP: 0.79,
-    INR: 83.5,
-};
-
 // ─── Field label helper ───────────────────────────────────────────────────────
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -56,14 +50,10 @@ export default function EditExpensePage() {
     const params = useParams();
     const router = useRouter();
     const id = params?.id as string;
-    const { currencySymbol, toUsdCents, currency } = useCurrency();
+    const { currencySymbol, toUsdAmount, fromUsdAmount, currency } = useCurrency();
 
     const [loadStatus, setLoadStatus] = useState<"loading" | "ready" | "error">("loading");
-    const [title, setTitle] = useState("");
-    const [amount, setAmount] = useState("");
-    const [category, setCategory] = useState<ExpenseCategory>("food");
-    const [date, setDate] = useState("");
-    const [note, setNote] = useState("");
+    const { values, errors, handleChange, setFormValues, handleSubmit: submitForm } = useExpenseForm();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState("");
 
@@ -74,18 +64,18 @@ export default function EditExpensePage() {
             .then(async (res) => {
                 if (!res.ok) throw new Error("Not found");
                 const data: Expense = await res.json();
-                setTitle(data.title);
                 // Convert stored USD cents → local currency value for display
-                const localAmount = (data.amount / 100) * (EXCHANGE_RATES[currency] ?? 1);
-                setAmount(localAmount.toFixed(2));
-                setCategory(data.category);
-                setDate(data.date);
-                setNote(data.note ?? "");
+                setFormValues({
+                    title: data.title,
+                    amount: fromUsdAmount(data.amount).toFixed(2),
+                    category: data.category,
+                    date: data.date,
+                    note: data.note ?? "",
+                });
                 setLoadStatus("ready");
             })
             .catch(() => setLoadStatus("error"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [id]); // intentionally only run on mount; currency change will update the displayed value via the label
+    }, [fromUsdAmount, id, setFormValues]);
 
     // ── Submit handler ────────────────────────────────────────────────────────
     async function handleSubmit(e: React.FormEvent) {
@@ -94,25 +84,26 @@ export default function EditExpensePage() {
         setSubmitError("");
 
         try {
-            const res = await fetch(`/api/expenses/${id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    title: title.trim(),
-                    // Convert local-currency input back to USD cents
-                    amount: toUsdCents(parseFloat(amount)),
-                    category,
-                    date,
-                    note: note.trim() || undefined,
-                }),
-            });
+            await submitForm(async (formData) => {
+                const res = await fetch(`/api/expenses/${id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        title: formData.title,
+                        amount: toUsdAmount(formData.amount),
+                        category: formData.category,
+                        date: formData.date,
+                        note: formData.note,
+                    }),
+                });
 
-            if (res.ok) {
-                router.push(`/expenses/${id}`);
-            } else {
-                const body = await res.json();
-                setSubmitError(body.error || "Failed to save changes.");
-            }
+                if (res.ok) {
+                    router.push(`/expenses/${id}`);
+                } else {
+                    const body = await res.json();
+                    setSubmitError(body.error || "Failed to save changes.");
+                }
+            });
         } catch {
             setSubmitError("Network error. Please try again.");
         } finally {
@@ -121,7 +112,7 @@ export default function EditExpensePage() {
     }
 
     // ── Selected category config ──────────────────────────────────────────────
-    const cat = CATEGORY_CONFIG[category];
+    const cat = CATEGORY_CONFIG[values.category];
 
     // ── Loading state ─────────────────────────────────────────────────────────
     if (loadStatus === "loading") {
@@ -230,8 +221,8 @@ export default function EditExpensePage() {
                         <input
                             type="text"
                             required
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
+                            value={values.title}
+                            onChange={(e) => handleChange("title", e.target.value)}
                             placeholder="What did you spend on?"
                             style={{
                                 width: "100%", boxSizing: "border-box",
@@ -250,6 +241,11 @@ export default function EditExpensePage() {
                                 e.target.style.boxShadow = "none";
                             }}
                         />
+                        {errors.title ? (
+                            <p style={{ color: "#f87171", fontSize: "0.78rem", marginTop: 6 }}>
+                                {errors.title}
+                            </p>
+                        ) : null}
                     </div>
 
                     {/* Amount + Date row */}
@@ -268,8 +264,8 @@ export default function EditExpensePage() {
                                     required
                                     step="0.01"
                                     min="0.01"
-                                    value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
+                                    value={values.amount}
+                                    onChange={(e) => handleChange("amount", e.target.value)}
                                     placeholder="0.00"
                                     style={{
                                         width: "100%", boxSizing: "border-box",
@@ -289,14 +285,19 @@ export default function EditExpensePage() {
                                     }}
                                 />
                             </div>
+                            {errors.amount ? (
+                                <p style={{ color: "#f87171", fontSize: "0.78rem", marginTop: 6 }}>
+                                    {errors.amount}
+                                </p>
+                            ) : null}
                         </div>
                         <div>
                             <FieldLabel>Date</FieldLabel>
                             <input
                                 type="date"
                                 required
-                                value={date}
-                                onChange={(e) => setDate(e.target.value)}
+                                value={values.date}
+                                onChange={(e) => handleChange("date", e.target.value)}
                                 style={{
                                     width: "100%", boxSizing: "border-box",
                                     padding: "11px 14px", borderRadius: 10,
@@ -315,6 +316,11 @@ export default function EditExpensePage() {
                                     e.target.style.boxShadow = "none";
                                 }}
                             />
+                            {errors.date ? (
+                                <p style={{ color: "#f87171", fontSize: "0.78rem", marginTop: 6 }}>
+                                    {errors.date}
+                                </p>
+                            ) : null}
                         </div>
                     </div>
 
@@ -328,12 +334,12 @@ export default function EditExpensePage() {
                         }}>
                             {CATEGORIES.map((cat) => {
                                 const cfg = CATEGORY_CONFIG[cat];
-                                const isSelected = category === cat;
+                                const isSelected = values.category === cat;
                                 return (
                                     <button
                                         key={cat}
                                         type="button"
-                                        onClick={() => setCategory(cat)}
+                                        onClick={() => handleChange("category", cat)}
                                         style={{
                                             display: "flex",
                                             flexDirection: "column",
@@ -356,14 +362,19 @@ export default function EditExpensePage() {
                                 );
                             })}
                         </div>
+                        {errors.category ? (
+                            <p style={{ color: "#f87171", fontSize: "0.78rem", marginTop: 6 }}>
+                                {errors.category}
+                            </p>
+                        ) : null}
                     </div>
 
                     {/* Note */}
                     <div style={{ marginBottom: 24 }}>
                         <FieldLabel>Note <span style={{ textTransform: "none", fontWeight: 400 }}>(optional)</span></FieldLabel>
                         <textarea
-                            value={note}
-                            onChange={(e) => setNote(e.target.value)}
+                            value={values.note}
+                            onChange={(e) => handleChange("note", e.target.value)}
                             rows={3}
                             placeholder="Add a note about this expense..."
                             style={{

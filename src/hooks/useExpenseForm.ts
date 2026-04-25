@@ -22,11 +22,12 @@ interface ExpenseFormErrors {
 
 interface UseExpenseFormReturn {
     values: ExpenseFormValues;
+    errors: ExpenseFormErrors;
     handleChange: (
         field: keyof ExpenseFormValues,
         value: string
     ) => void;
-    errors: ExpenseFormErrors;
+    setFormValues: (next: Partial<ExpenseFormValues>) => void;
     handleSubmit: (
         onSubmit: (data: {
             title: string;
@@ -66,7 +67,7 @@ export function useExpenseForm(
         return {
             title: initialValues?.title ?? "",
             amount: initialValues?.amount
-                ? (initialValues.amount / 100).toFixed(2)
+                ? initialValues.amount.toFixed(2)
                 : "",
             category: initialValues?.category ?? "food",
             date: initialValues?.date ?? new Date().toISOString().slice(0, 10),
@@ -76,6 +77,10 @@ export function useExpenseForm(
 
     const [values, setValues] = useState<ExpenseFormValues>(getDefaults);
     const [errors, setErrors] = useState<ExpenseFormErrors>({});
+
+    const setFormValues = useCallback((next: Partial<ExpenseFormValues>) => {
+        setValues((prev) => ({ ...prev, ...next }));
+    }, []);
 
     const handleChange = useCallback(
         (field: keyof ExpenseFormValues, value: string) => {
@@ -134,7 +139,7 @@ export function useExpenseForm(
 
             onSubmit({
                 title: values.title.trim(),
-                amount: Math.round(parseFloat(values.amount) * 100), // convert to cents
+                amount: parseFloat(values.amount),
                 category: values.category,
                 date: values.date,
                 note: values.note.trim() || undefined,
@@ -148,5 +153,12 @@ export function useExpenseForm(
         setErrors({});
     }, [getDefaults]);
 
-    return { values, handleChange, errors, handleSubmit, reset };
+    return {
+        values,
+        errors,
+        handleChange,
+        setFormValues,
+        handleSubmit,
+        reset,
+    };
 }

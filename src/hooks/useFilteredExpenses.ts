@@ -43,6 +43,12 @@ export function useFilteredExpenses(): {
             result = result.filter((e) => e.amount <= filters.maxAmount!);
         }
 
+        result.sort((a, b) => {
+            const byDate = b.date.localeCompare(a.date);
+            if (byDate !== 0) return byDate;
+            return b.createdAt.localeCompare(a.createdAt);
+        });
+
         return { filteredExpenses: result, count: result.length };
     }, [expenses, filters]);
 }

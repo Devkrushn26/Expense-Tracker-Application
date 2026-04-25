@@ -1,85 +1,105 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { MonthlyBudget } from "@/types/expense";
-import { getBudgets, isValidMonth } from "@/lib/data";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-// GET /api/budget
+const MONTH_REGEX = /^\d{4}-\d{2}$/;
+
+type BudgetRow = {
+  id: string;
+  user_id: string;
+  month: string;
+  amount: number;
+  created_at: string;
+};
+
+function toBudget(row: BudgetRow): MonthlyBudget {
+  return {
+    month: row.month,
+    amount: row.amount,
+  };
+}
 
 export async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
-    const month = searchParams.get("month");
+  const supabase = await getSupabaseServerClient();
+  const auth = await supabase.auth.getUser();
+  const user = auth.data.user;
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    if (month) {
-        const budget = getBudgets().find((b) => b.month === month);
-        return NextResponse.json(budget || { month, amount: 0 });
-    }
+  const month = new URL(request.url).searchParams.get("month");
 
-    return NextResponse.json(getBudgets());
+  if (month) {
+    const one = await supabase
+      .from("budgets")
+      .select("id,user_id,month,amount,created_at")
+      .eq("month", month)
+      .maybeSingle();
+
+    if (one.error) return NextResponse.json({ error: one.error.message }, { status: 500 });
+    if (!one.data) return NextResponse.json({ month: month, amount: 0 });
+    return NextResponse.json(toBudget(one.data as BudgetRow));
+  }
+
+  const all = await supabase
+    .from("budgets")
+    .select("id,user_id,month,amount,created_at")
+    .order("month", { ascending: false });
+
+  if (all.error) return NextResponse.json({ error: all.error.message }, { status: 500 });
+  return NextResponse.json((all.data ?? []).map(toBudget));
 }
-
-// POST /api/budget
 
 export async function POST(request: NextRequest) {
-    try {
-        const body = await request.json();
-        const { month, amount } = body;
+  const supabase = await getSupabaseServerClient();
+  const auth = await supabase.auth.getUser();
+  const user = auth.data.user;
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-       
-        const errors: string[] = [];
+  try {
+    const body = await request.json();
+    const month = body.month;
+    const amount = body.amount;
 
-        if (!month || typeof month !== "string" || !isValidMonth(month)) {
-            errors.push("month must be a valid YYYY-MM string");
-        }
-
-        if (amount == null || typeof amount !== "number" || amount < 0) {
-            errors.push("amount must be a non-negative number (cents)");
-        }
-
-        if (errors.length > 0) {
-            return NextResponse.json({ errors }, { status: 400 });
-        }
-
-      
-        const budgets = getBudgets();
-        const existing = budgets.findIndex((b) => b.month === month);
-
-        if (existing >= 0) {
-            budgets[existing].amount = Number(amount);
-            return NextResponse.json(budgets[existing]);
-        }
-
-        const newBudget: MonthlyBudget = {
-            month,
-            amount: Number(amount),
-        };
-
-        budgets.push(newBudget);
-        return NextResponse.json(newBudget, { status: 201 });
-    } catch {
-        return NextResponse.json(
-            { error: "Invalid request body" },
-            { status: 400 }
-        );
+    const errors: string[] = [];
+    if (!month || typeof month !== "string" || !MONTH_REGEX.test(month)) {
+      errors.push("month must be YYYY-MM");
     }
-}
+    if (amount == null || typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
+      errors.push("amount must be a non-negative number");
+    }
+    if (errors.length > 0) return NextResponse.json({ errors: errors }, { status: 400 });
 
-// DELETE /api/budget?month=YYYY-MM
+    const upsertResult = await supabase
+      .from("budgets")
+      .upsert(
+        { user_id: user.id, month: month, amount: Number(amount) },
+        { onConflict: "user_id,month" }
+      )
+      .select("id,user_id,month,amount,created_at")
+      .single();
+
+    if (upsertResult.error) {
+      return NextResponse.json({ error: upsertResult.error.message }, { status: 500 });
+    }
+
+    return NextResponse.json(toBudget(upsertResult.data as BudgetRow));
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+}
 
 export async function DELETE(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
-    const month = searchParams.get("month");
+  const supabase = await getSupabaseServerClient();
+  const auth = await supabase.auth.getUser();
+  const user = auth.data.user;
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    if (!month || !isValidMonth(month)) {
-        return NextResponse.json({ error: "month query param must be YYYY-MM" }, { status: 400 });
-    }
+  const month = new URL(request.url).searchParams.get("month");
+  if (!month || !MONTH_REGEX.test(month)) {
+    return NextResponse.json({ error: "month query param must be YYYY-MM" }, { status: 400 });
+  }
 
-    const budgets = getBudgets();
-    const idx = budgets.findIndex((b) => b.month === month);
+  const result = await supabase.from("budgets").delete().eq("month", month);
+  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
 
-    if (idx === -1) {
-        return NextResponse.json({ error: "Budget not found" }, { status: 404 });
-    }
-
-    budgets.splice(idx, 1);
-    return NextResponse.json({ message: "Budget deleted" });
+  return NextResponse.json({ message: "Budget deleted" });
 }
-

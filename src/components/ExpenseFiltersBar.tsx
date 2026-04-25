@@ -1,5 +1,6 @@
 "use client";
 
+import { useCurrency } from "@/context/CurrencyContext";
 import { useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import { setFilters, clearFilters } from "@/store/expenseSlice";
 import type { ExpenseCategory } from "@/types/expense";
@@ -17,6 +18,7 @@ interface ExpenseFiltersBarProps {
 export default function ExpenseFiltersBar({ className = "" }: ExpenseFiltersBarProps) {
     const dispatch = useAppDispatch();
     const filters = useAppSelector((state) => state.expenses.filters);
+    const { currencySymbol, toUsdAmount, fromUsdAmount } = useCurrency();
 
     const activeCount = useMemo(() => {
         let count = 0;
@@ -67,26 +69,26 @@ export default function ExpenseFiltersBar({ className = "" }: ExpenseFiltersBarP
                 {/* Min / Max amount */}
                 <input
                     type="number"
-                    placeholder="Min ($)"
+                    placeholder={`Min (${currencySymbol})`}
                     step="0.01"
                     min="0"
-                    value={filters.minAmount !== null ? (filters.minAmount / 100).toString() : ""}
+                    value={filters.minAmount !== null ? fromUsdAmount(filters.minAmount).toString() : ""}
                     onChange={(e) =>
                         dispatch(setFilters({
-                            minAmount: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : null,
+                            minAmount: e.target.value ? toUsdAmount(parseFloat(e.target.value)) : null,
                         }))
                     }
                     className="w-24 rounded-lg px-3 py-2 text-sm"
                 />
                 <input
                     type="number"
-                    placeholder="Max ($)"
+                    placeholder={`Max (${currencySymbol})`}
                     step="0.01"
                     min="0"
-                    value={filters.maxAmount !== null ? (filters.maxAmount / 100).toString() : ""}
+                    value={filters.maxAmount !== null ? fromUsdAmount(filters.maxAmount).toString() : ""}
                     onChange={(e) =>
                         dispatch(setFilters({
-                            maxAmount: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : null,
+                            maxAmount: e.target.value ? toUsdAmount(parseFloat(e.target.value)) : null,
                         }))
                     }
                     className="w-24 rounded-lg px-3 py-2 text-sm"

@@ -5,10 +5,6 @@ import { useCurrency } from "@/context/CurrencyContext";
 import type { MonthlyBudget, Expense } from "@/types/expense";
 
 // ─── Exchange rates (mirrored from CurrencyContext) ───────────────────────────
-const EXCHANGE_RATES: Record<string, number> = {
-    USD: 1, EUR: 0.92, GBP: 0.79, INR: 83.5,
-};
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -70,22 +66,23 @@ function ProgressBar({ spent, budget }: { spent: number; budget: number }) {
 interface BudgetCardProps {
     budget: MonthlyBudget;
     spent: number;
-    onSave: (month: string, newAmountCents: number) => Promise<void>;
+    onSave: (month: string, newAmount: number) => Promise<void>;
     onDelete: (month: string) => Promise<void>;
     currencySymbol: string;
     currency: string;
-    formatAmount: (cents: number) => string;
-    toUsdCents: (v: number) => number;
+    formatAmount: (amount: number) => string;
+    toUsdAmount: (v: number) => number;
+    fromUsdAmount: (amount: number) => number;
 }
 
-function BudgetCard({ budget, spent, onSave, onDelete, currencySymbol, currency, formatAmount, toUsdCents }: BudgetCardProps) {
+function BudgetCard({ budget, spent, onSave, onDelete, currencySymbol, currency, formatAmount, toUsdAmount, fromUsdAmount }: BudgetCardProps) {
     const [editing, setEditing] = useState(false);
     const [editValue, setEditValue] = useState("");
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
     // Convert stored USD cents → active currency for display in the input
-    const localAmount = (budget.amount / 100) * (EXCHANGE_RATES[currency] ?? 1);
+    const localAmount = fromUsdAmount(budget.amount);
     const pct = budget.amount > 0 ? Math.min((spent / budget.amount) * 100, 100) : 0;
     const over = budget.amount > 0 && spent > budget.amount;
 
@@ -98,7 +95,7 @@ function BudgetCard({ budget, spent, onSave, onDelete, currencySymbol, currency,
         const v = parseFloat(editValue);
         if (isNaN(v) || v < 0) return;
         setSaving(true);
-        await onSave(budget.month, toUsdCents(v));
+        await onSave(budget.month, toUsdAmount(v));
         setSaving(false);
         setEditing(false);
     }
@@ -256,7 +253,7 @@ function BudgetCard({ budget, spent, onSave, onDelete, currencySymbol, currency,
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BudgetPage() {
-    const { formatAmount, currencySymbol, toUsdCents, currency } = useCurrency();
+    const { formatAmount, currencySymbol, toUsdAmount, fromUsdAmount, currency } = useCurrency();
 
     const [budgets, setBudgets] = useState<MonthlyBudget[]>([]);
     const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -301,7 +298,7 @@ export default function BudgetPage() {
             const res = await fetch("/api/budget", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ month: formMonth, amount: toUsdCents(amount) }),
+                body: JSON.stringify({ month: formMonth, amount: toUsdAmount(amount) }),
             });
             if (res.ok) {
                 setMessage({ type: "success", text: `Budget for ${formMonth} saved!` });
@@ -319,11 +316,11 @@ export default function BudgetPage() {
     };
 
     // ── Inline save (update existing) ────────────────────────────────────────
-    const handleSave = async (month: string, newAmountCents: number) => {
+    const handleSave = async (month: string, newAmount: number) => {
         await fetch("/api/budget", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ month, amount: newAmountCents }),
+            body: JSON.stringify({ month, amount: newAmount }),
         });
         await fetchData();
     };
@@ -469,7 +466,8 @@ export default function BudgetPage() {
                                 currencySymbol={currencySymbol}
                                 currency={currency}
                                 formatAmount={formatAmount}
-                                toUsdCents={toUsdCents}
+                                toUsdAmount={toUsdAmount}
+                                fromUsdAmount={fromUsdAmount}
                             />
                         ))}
                     </div>
