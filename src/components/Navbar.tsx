@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCurrency, type Currency } from "@/context/CurrencyContext";
 import { supabase } from "@/lib/supabase/client";
+import type { Session } from "@supabase/supabase-js";
 
 const CURRENCIES: { value: Currency; label: string; symbol: string }[] = [
   { value: "USD", label: "USD", symbol: "$" },
@@ -25,6 +26,25 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+
+  useEffect(() => {
+    // Get the initial session on mount
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+    });
+
+    // Reactively update on login / logout / token refresh
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const isLoggedIn = !!session;
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -101,21 +121,35 @@ export default function Navbar() {
             ))}
           </select>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={loggingOut}
-            className="ml-2 text-sm font-semibold px-3 py-1.5 rounded-lg transition-all"
-            style={{
-              border: "1px solid rgba(239,68,68,0.35)",
-              color: "#f87171",
-              background: "rgba(239,68,68,0.08)",
-              opacity: loggingOut ? 0.7 : 1,
-              cursor: loggingOut ? "not-allowed" : "pointer",
-            }}
-          >
-            {loggingOut ? "Logging out..." : "Logout"}
-          </button>
+          {isLoggedIn ? (
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="ml-2 text-sm font-semibold px-3 py-1.5 rounded-lg transition-all"
+              style={{
+                border: "1px solid rgba(239,68,68,0.35)",
+                color: "#f87171",
+                background: "rgba(239,68,68,0.08)",
+                opacity: loggingOut ? 0.7 : 1,
+                cursor: loggingOut ? "not-allowed" : "pointer",
+              }}
+            >
+              {loggingOut ? "Logging out..." : "Logout"}
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              className="ml-2 text-sm font-semibold px-3 py-1.5 rounded-lg transition-all"
+              style={{
+                border: "1px solid rgba(99,102,241,0.35)",
+                color: "#a78bfa",
+                background: "rgba(99,102,241,0.08)",
+              }}
+            >
+              Login
+            </Link>
+          )}
         </div>
       </div>
     </nav>

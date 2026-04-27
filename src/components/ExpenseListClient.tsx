@@ -156,7 +156,7 @@ export default function ExpenseListClient() {
                     </button>
 
                     <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                        Page {page} of {totalPages}
+                       Total Expenses {total}   ||   Page {page} of {totalPages}     
                     </p>
 
                     <button
