@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Expense, ExpenseCategory } from "@/types/expense";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useAppDispatch } from "@/hooks/useRedux";
+import { deleteExpense, fetchExpenseById } from "@/store/expenseSlice";
 
 // ─── Category Config ────────────────────────────────────────────────────────
 
@@ -79,6 +81,7 @@ export default function ExpenseDetailPage() {
     const params = useParams();
     const router = useRouter();
     const id = params?.id as string;
+    const dispatch = useAppDispatch();
     const { formatAmount } = useCurrency();
 
     const [expense, setExpense] = useState<Expense | null>(null);
@@ -88,24 +91,21 @@ export default function ExpenseDetailPage() {
     useEffect(() => {
         if (!id) return;
         setStatus("loading");
-        fetch(`/api/expenses/${id}`)
-            .then(async (res) => {
-                if (res.status === 404) { setStatus("notfound"); return; }
-                if (!res.ok) throw new Error("Fetch failed");
-                const data: Expense = await res.json();
+        dispatch(fetchExpenseById(id)).unwrap()
+            .then((data) => {
                 setExpense(data);
                 setStatus("found");
             })
-            .catch(() => setStatus("error"));
-    }, [id]);
+            .catch((err) => setStatus(String(err).includes("not found") ? "notfound" : "error"));
+    }, [dispatch, id]);
 
     async function handleDelete() {
         if (!expense) return;
         if (!confirm(`Delete "${expense.title}"? This cannot be undone.`)) return;
         setDeleting(true);
         try {
-            const res = await fetch(`/api/expenses/${expense.id}`, { method: "DELETE" });
-            if (res.ok) router.push("/expenses");
+            await dispatch(deleteExpense(expense.id)).unwrap();
+            router.push("/expenses");
         } finally {
             setDeleting(false);
         }

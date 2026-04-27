@@ -4,11 +4,17 @@ import { useCurrency } from "@/context/CurrencyContext";
 import { useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import { setFilters, clearFilters } from "@/store/expenseSlice";
 import type { ExpenseCategory } from "@/types/expense";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 const CATEGORIES: ExpenseCategory[] = [
-    "food", "transport", "housing", "health",
-    "entertainment", "education", "shopping", "other",
+    "food",
+    "transport",
+    "housing",
+    "health",
+    "entertainment",
+    "education",
+    "shopping",
+    "other",
 ];
 
 interface ExpenseFiltersBarProps {
@@ -18,7 +24,9 @@ interface ExpenseFiltersBarProps {
 export default function ExpenseFiltersBar({ className = "" }: ExpenseFiltersBarProps) {
     const dispatch = useAppDispatch();
     const filters = useAppSelector((state) => state.expenses.filters);
-    const { currencySymbol, toUsdAmount, fromUsdAmount } = useCurrency();
+    const { currencySymbol, toUsdAmount } = useCurrency();
+    const [minAmountInput, setMinAmountInput] = useState("");
+    const [maxAmountInput, setMaxAmountInput] = useState("");
 
     const activeCount = useMemo(() => {
         let count = 0;
@@ -30,19 +38,32 @@ export default function ExpenseFiltersBar({ className = "" }: ExpenseFiltersBarP
         return count;
     }, [filters]);
 
+    const getAmountFilter = (value: string) => {
+        if (!value.trim()) return null;
+
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue)) return null;
+
+        return toUsdAmount(numericValue);
+    };
+
+    const resetFilters = () => {
+        setMinAmountInput("");
+        setMaxAmountInput("");
+        dispatch(clearFilters());
+    };
+
     return (
         <div className={`space-y-3 ${className}`}>
             <div className="flex flex-wrap items-center gap-3">
-                {/* Search */}
                 <input
                     type="text"
-                    placeholder="🔍  Search expenses..."
+                    placeholder="Search expenses..."
                     value={filters.search}
                     onChange={(e) => dispatch(setFilters({ search: e.target.value }))}
                     className="rounded-lg px-3 py-2 text-sm w-full sm:w-64"
                 />
 
-                {/* Category */}
                 <select
                     value={filters.category}
                     onChange={(e) =>
@@ -58,7 +79,6 @@ export default function ExpenseFiltersBar({ className = "" }: ExpenseFiltersBarP
                     ))}
                 </select>
 
-                {/* Month */}
                 <input
                     type="month"
                     value={filters.month}
@@ -66,55 +86,50 @@ export default function ExpenseFiltersBar({ className = "" }: ExpenseFiltersBarP
                     className="rounded-lg px-3 py-2 text-sm"
                 />
 
-                {/* Min / Max amount */}
                 <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder={`Min (${currencySymbol})`}
-                    step="0.01"
-                    min="0"
-                    value={filters.minAmount !== null ? fromUsdAmount(filters.minAmount).toString() : ""}
-                    onChange={(e) =>
-                        dispatch(setFilters({
-                            minAmount: e.target.value ? toUsdAmount(parseFloat(e.target.value)) : null,
-                        }))
-                    }
+                    value={minAmountInput}
+                    onChange={(e) => {
+                        setMinAmountInput(e.target.value);
+                        dispatch(setFilters({ minAmount: getAmountFilter(e.target.value) }));
+                    }}
                     className="w-24 rounded-lg px-3 py-2 text-sm"
                 />
                 <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder={`Max (${currencySymbol})`}
-                    step="0.01"
-                    min="0"
-                    value={filters.maxAmount !== null ? fromUsdAmount(filters.maxAmount).toString() : ""}
-                    onChange={(e) =>
-                        dispatch(setFilters({
-                            maxAmount: e.target.value ? toUsdAmount(parseFloat(e.target.value)) : null,
-                        }))
-                    }
+                    value={maxAmountInput}
+                    onChange={(e) => {
+                        setMaxAmountInput(e.target.value);
+                        dispatch(setFilters({ maxAmount: getAmountFilter(e.target.value) }));
+                    }}
                     className="w-24 rounded-lg px-3 py-2 text-sm"
                 />
             </div>
 
-            {/* Active filter count + Reset */}
             {activeCount > 0 && (
                 <div className="flex items-center gap-3 text-sm">
                     <span
                         className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
                         style={{
-                            background: 'rgba(99, 102, 241, 0.15)',
-                            color: '#a78bfa',
+                            background: "rgba(99, 102, 241, 0.15)",
+                            color: "#a78bfa",
                         }}
                     >
                         {activeCount} filter{activeCount !== 1 ? "s" : ""} active
                     </span>
                     <button
-                        onClick={() => dispatch(clearFilters())}
+                        type="button"
+                        onClick={resetFilters}
                         className="text-xs font-medium transition-colors"
-                        style={{ color: '#818cf8' }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = '#a78bfa')}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = '#818cf8')}
+                        style={{ color: "#818cf8" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "#a78bfa")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "#818cf8")}
                     >
-                        Reset all ×
+                        Reset all x
                     </button>
                 </div>
             )}

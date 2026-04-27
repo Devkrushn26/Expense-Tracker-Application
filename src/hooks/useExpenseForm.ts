@@ -27,7 +27,6 @@ interface UseExpenseFormReturn {
         field: keyof ExpenseFormValues,
         value: string
     ) => void;
-    setFormValues: (next: Partial<ExpenseFormValues>) => void;
     handleSubmit: (
         onSubmit: (data: {
             title: string;
@@ -36,7 +35,7 @@ interface UseExpenseFormReturn {
             date: string;
             note?: string;
         }) => void | Promise<void>
-    ) => void;
+    ) => Promise<void>;
     reset: () => void;
 }
 
@@ -56,6 +55,19 @@ const VALID_CATEGORIES: ExpenseCategory[] = [
 ];
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidDateString(value: string) {
+    if (!DATE_REGEX.test(value)) return false;
+
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+
+    return (
+        date.getUTCFullYear() === year &&
+        date.getUTCMonth() === month - 1 &&
+        date.getUTCDate() === day
+    );
+}
 
 
 // Hook
@@ -77,10 +89,6 @@ export function useExpenseForm(
 
     const [values, setValues] = useState<ExpenseFormValues>(getDefaults);
     const [errors, setErrors] = useState<ExpenseFormErrors>({});
-
-    const setFormValues = useCallback((next: Partial<ExpenseFormValues>) => {
-        setValues((prev) => ({ ...prev, ...next }));
-    }, []);
 
     const handleChange = useCallback(
         (field: keyof ExpenseFormValues, value: string) => {
@@ -112,18 +120,15 @@ export function useExpenseForm(
 
         if (!values.date || !DATE_REGEX.test(values.date)) {
             errs.date = "Date must be a valid YYYY-MM-DD";
-        } else {
-            const d = new Date(values.date);
-            if (isNaN(d.getTime())) {
-                errs.date = "Date is not a valid calendar date";
-            }
+        } else if (!isValidDateString(values.date)) {
+            errs.date = "Date is not a valid calendar date";
         }
 
         return errs;
     }, [values]);
 
     const handleSubmit = useCallback(
-        (
+        async (
             onSubmit: (data: {
                 title: string;
                 amount: number;
@@ -137,7 +142,7 @@ export function useExpenseForm(
 
             if (Object.keys(errs).length > 0) return;
 
-            onSubmit({
+            await onSubmit({
                 title: values.title.trim(),
                 amount: parseFloat(values.amount),
                 category: values.category,
@@ -157,7 +162,6 @@ export function useExpenseForm(
         values,
         errors,
         handleChange,
-        setFormValues,
         handleSubmit,
         reset,
     };

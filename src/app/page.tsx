@@ -22,8 +22,8 @@ import { useCurrency } from "@/context/CurrencyContext";
 import DashboardSummary from "@/components/DashboardSummary";
 import { useExpenseSummary } from "@/hooks/useExpenseSummary";
 import { useAppDispatch } from "@/hooks/useRedux";
-import { setExpenses as setExpensesAction } from "@/store/expenseSlice";
-import { setBudgets as setBudgetsAction } from "@/store/budgetSlice";
+import { fetchExpenses } from "@/store/expenseSlice";
+import { fetchBudgets } from "@/store/budgetSlice";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -61,9 +61,10 @@ const ALL_CATEGORIES: ExpenseCategory[] = [
   "other",
 ];
 
-function getLast12Months(): string[] {
+function getLast12Months(anchorMonth: string): string[] {
   const months: string[] = [];
-  const d = new Date();
+  const [anchorYear, anchorMonthNumber] = anchorMonth.split("-").map(Number);
+  const d = new Date(anchorYear, anchorMonthNumber - 1, 1);
   for (let i = 11; i >= 0; i--) {
     const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
     months.push(
@@ -71,6 +72,12 @@ function getLast12Months(): string[] {
     );
   }
   return months;
+}
+
+function getLatestMonth(months: string[], fallbackMonth: string) {
+  return months.reduce((latest, month) => {
+    return month > latest ? month : latest;
+  }, fallbackMonth);
 }
 
 function shortMonth(ym: string) {
@@ -236,23 +243,13 @@ export default function DashboardPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [er, br] = await Promise.all([
-        fetch("/api/expenses"),
-        fetch("/api/budget"),
+      const [expenseResult, budgetResult] = await Promise.all([
+        dispatch(fetchExpenses(undefined)).unwrap(),
+        dispatch(fetchBudgets()).unwrap(),
       ]);
-      if (er.ok) {
-        const fetchedExpenses = (await er.json()) as Expense[];
-        setExpenses(fetchedExpenses);
-        dispatch(setExpensesAction(fetchedExpenses));
-      }
-      if (br.ok) {
-        const bd = await br.json();
-        const fetchedBudgets = (
-          Array.isArray(bd) ? bd : [bd]
-        ) as MonthlyBudget[];
-        setBudgets(fetchedBudgets);
-        dispatch(setBudgetsAction(fetchedBudgets));
-      }
+
+      setExpenses(expenseResult.items);
+      setBudgets(budgetResult);
     } catch {
       /* ignore */
     } finally {
@@ -264,7 +261,14 @@ export default function DashboardPage() {
     fetchAll();
   }, [fetchAll]);
 
-  const last12 = getLast12Months();
+  const chartAnchorMonth = getLatestMonth(
+    [
+      ...expenses.map((expense) => expense.date.slice(0, 7)),
+      ...budgets.map((budget) => budget.month),
+    ],
+    currentMonth,
+  );
+  const last12 = getLast12Months(chartAnchorMonth);
   const currentYear = new Date().getFullYear().toString();
 
   // ── Year-to-date stats ────────────────────────────────────────────────────

@@ -33,7 +33,7 @@ export default function LoginPage() {
         }
 
         setMessage("Login successful");
-        router.push("/expenses");
+        router.push("/");
         router.refresh();
         return;
       }

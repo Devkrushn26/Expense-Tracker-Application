@@ -16,6 +16,18 @@ const initialState: BudgetState = {
 
 // Async Thunks
 
+export const fetchBudgets = createAsyncThunk(
+    "budget/fetchBudgets",
+    async (_: void, { rejectWithValue }) => {
+        try {
+            const res = await fetch("/api/budget");
+            if (!res.ok) throw new Error("Failed to fetch budgets");
+            return (await res.json()) as MonthlyBudget[];
+        } catch (err) {
+            return rejectWithValue((err as Error).message);
+        }
+    }
+);
 
 /** GET /api/budget?month=YYYY-MM */
 export const fetchBudget = createAsyncThunk(
@@ -25,6 +37,19 @@ export const fetchBudget = createAsyncThunk(
             const res = await fetch(`/api/budget?month=${month}`);
             if (!res.ok) throw new Error("Failed to fetch budget");
             return (await res.json()) as MonthlyBudget;
+        } catch (err) {
+            return rejectWithValue((err as Error).message);
+        }
+    }
+);
+
+export const deleteBudget = createAsyncThunk(
+    "budget/deleteBudget",
+    async (month: string, { rejectWithValue }) => {
+        try {
+            const res = await fetch(`/api/budget?month=${month}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed to delete budget");
+            return month;
         } catch (err) {
             return rejectWithValue((err as Error).message);
         }
@@ -64,6 +89,18 @@ const budgetSlice = createSlice({
         },
     },
     extraReducers: (builder) => {
+        builder
+            .addCase(fetchBudgets.pending, (state) => {
+                state.status = "loading";
+            })
+            .addCase(fetchBudgets.fulfilled, (state, action) => {
+                state.status = "succeeded";
+                state.budgets = action.payload;
+            })
+            .addCase(fetchBudgets.rejected, (state) => {
+                state.status = "failed";
+            });
+
         // fetchBudget
         builder
             .addCase(fetchBudget.pending, (state) => {
@@ -97,6 +134,18 @@ const budgetSlice = createSlice({
                 }
             })
             .addCase(setBudget.rejected, (state) => {
+                state.status = "failed";
+            });
+
+        builder
+            .addCase(deleteBudget.pending, (state) => {
+                state.status = "loading";
+            })
+            .addCase(deleteBudget.fulfilled, (state, action) => {
+                state.status = "succeeded";
+                state.budgets = state.budgets.filter((budget) => budget.month !== action.payload);
+            })
+            .addCase(deleteBudget.rejected, (state) => {
                 state.status = "failed";
             });
     },

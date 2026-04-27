@@ -14,6 +14,7 @@ const VALID_CATEGORIES: ExpenseCategory[] = [
 ];
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const MONTH_REGEX = /^\d{4}-\d{2}$/;
 
 type ExpenseRow = {
   id: string;
@@ -50,6 +51,15 @@ function normalizeAmountWriteError(message: string): string {
   return message;
 }
 
+function getNextMonth(month: string): string {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const nextMonthDate = new Date(Date.UTC(year, monthNumber, 1));
+  const nextYear = nextMonthDate.getUTCFullYear();
+  const nextMonth = String(nextMonthDate.getUTCMonth() + 1).padStart(2, "0");
+
+  return `${nextYear}-${nextMonth}-01`;
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await getSupabaseServerClient();
   const auth = await supabase.auth.getUser();
@@ -77,16 +87,16 @@ export async function GET(request: NextRequest) {
   if (category && category !== "all") {
     query = query.eq("category", category);
   }
-  if (month) {
-    query = query.gte("date", month + "-01").lt("date", month + "-32");
+  if (month && MONTH_REGEX.test(month)) {
+    query = query.gte("date", month + "-01").lt("date", getNextMonth(month));
   }
   if (search) {
     query = query.or("title.ilike.%" + search + "%,note.ilike.%" + search + "%");
   }
-  if (minAmount && Number.isInteger(Number(minAmount))) {
+  if (minAmount && Number.isFinite(Number(minAmount))) {
     query = query.gte("amount", Number(minAmount));
   }
-  if (maxAmount && Number.isInteger(Number(maxAmount))) {
+  if (maxAmount && Number.isFinite(Number(maxAmount))) {
     query = query.lte("amount", Number(maxAmount));
   }
   if (usePagination) {

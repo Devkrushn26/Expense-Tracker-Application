@@ -3,6 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useCurrency } from "@/context/CurrencyContext";
 import type { MonthlyBudget, Expense } from "@/types/expense";
+import { useAppDispatch } from "@/hooks/useRedux";
+import { deleteBudget, fetchBudget, fetchBudgets, setBudget } from "@/store/budgetSlice";
+import { fetchExpenses } from "@/store/expenseSlice";
+import BudgetProgressBar from "@/components/BudgetProgressBar";
 
 // ─── Exchange rates (mirrored from CurrencyContext) ───────────────────────────
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -40,25 +44,8 @@ function focusOut(e: React.FocusEvent<HTMLInputElement>) {
     e.target.style.boxShadow = "none";
 }
 
-// ─── Progress bar ─────────────────────────────────────────────────────────────
-
-function ProgressBar({ spent, budget }: { spent: number; budget: number }) {
-    const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
-    const over = budget > 0 && spent > budget;
-    let grad = "linear-gradient(90deg,#10b981,#34d399)";
-    let glow = "rgba(16,185,129,0.3)";
-    if (over || pct >= 90) { grad = "linear-gradient(90deg,#ef4444,#f87171)"; glow = "rgba(239,68,68,0.3)"; }
-    else if (pct >= 70)    { grad = "linear-gradient(90deg,#f59e0b,#fbbf24)"; glow = "rgba(245,158,11,0.3)"; }
-    return (
-        <div style={{ height: 10, borderRadius: 999, background: "var(--bg-card)", overflow: "hidden" }}>
-            <div style={{
-                height: "100%", borderRadius: 999,
-                width: `${pct}%`, background: grad,
-                boxShadow: `0 0 10px ${glow}`,
-                transition: "width 0.7s ease-out",
-            }} />
-        </div>
-    );
+function formatBudgetMonth(month: string) {
+    return new Date(month + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
 // ─── Budget card with inline edit ─────────────────────────────────────────────
@@ -80,6 +67,7 @@ function BudgetCard({ budget, spent, onSave, onDelete, currencySymbol, currency,
     const [editValue, setEditValue] = useState("");
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
     // Convert stored USD cents → active currency for display in the input
     const localAmount = fromUsdAmount(budget.amount);
@@ -101,10 +89,13 @@ function BudgetCard({ budget, spent, onSave, onDelete, currencySymbol, currency,
     }
 
     async function handleDelete() {
-        if (!confirm(`Delete budget for ${budget.month}? This cannot be undone.`)) return;
         setDeleting(true);
-        await onDelete(budget.month);
-        setDeleting(false);
+        try {
+            await onDelete(budget.month);
+            setDeleteModalOpen(false);
+        } finally {
+            setDeleting(false);
+        }
     }
 
     return (
@@ -123,7 +114,7 @@ function BudgetCard({ budget, spent, onSave, onDelete, currencySymbol, currency,
                     <span style={{
                         fontSize: "1rem", fontWeight: 700, color: "var(--text-primary)",
                     }}>
-                        {new Date(budget.month + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                        {formatBudgetMonth(budget.month)}
                     </span>
                     <span style={{
                         marginLeft: 10, fontSize: "0.7rem", fontWeight: 600,
@@ -154,7 +145,7 @@ function BudgetCard({ budget, spent, onSave, onDelete, currencySymbol, currency,
                             Edit
                         </button>
                     )}
-                    <button onClick={handleDelete} disabled={deleting} style={{
+                    <button onClick={() => setDeleteModalOpen(true)} disabled={deleting} style={{
                         display: "inline-flex", alignItems: "center", gap: 5,
                         padding: "6px 12px", borderRadius: 8, cursor: "pointer",
                         background: "rgba(239,68,68,0.1)", color: "#f87171",
@@ -171,6 +162,101 @@ function BudgetCard({ budget, spent, onSave, onDelete, currencySymbol, currency,
                     </button>
                 </div>
             </div>
+
+            {deleteModalOpen && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby={`delete-budget-title-${budget.month}`}
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 100,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 20,
+                        background: "rgba(2,6,23,0.72)",
+                        backdropFilter: "blur(8px)",
+                        WebkitBackdropFilter: "blur(8px)",
+                    }}
+                    onClick={() => {
+                        if (!deleting) setDeleteModalOpen(false);
+                    }}
+                >
+                    <div
+                        style={{
+                            width: "min(420px, 100%)",
+                            background: "var(--bg-elevated)",
+                            border: "1px solid var(--glass-border)",
+                            borderRadius: 16,
+                            boxShadow: "var(--shadow-lg)",
+                            padding: "1.25rem",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h3
+                            id={`delete-budget-title-${budget.month}`}
+                            style={{
+                                fontSize: "1rem",
+                                fontWeight: 800,
+                                color: "var(--text-primary)",
+                                marginBottom: 8,
+                            }}
+                        >
+                            Delete budget?
+                        </h3>
+                        <p
+                            style={{
+                                color: "var(--text-secondary)",
+                                fontSize: "0.9rem",
+                                lineHeight: 1.5,
+                                marginBottom: 18,
+                            }}
+                        >
+                            Delete budget for {formatBudgetMonth(budget.month)}? This cannot be undone.
+                        </p>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                            <button
+                                type="button"
+                                onClick={() => setDeleteModalOpen(false)}
+                                disabled={deleting}
+                                style={{
+                                    padding: "9px 14px",
+                                    borderRadius: 10,
+                                    cursor: deleting ? "not-allowed" : "pointer",
+                                    background: "rgba(255,255,255,0.04)",
+                                    border: "1px solid var(--border-default)",
+                                    color: "var(--text-secondary)",
+                                    fontSize: "0.85rem",
+                                    fontWeight: 700,
+                                    opacity: deleting ? 0.6 : 1,
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDelete}
+                                disabled={deleting}
+                                style={{
+                                    padding: "9px 14px",
+                                    borderRadius: 10,
+                                    cursor: deleting ? "not-allowed" : "pointer",
+                                    background: "rgba(239,68,68,0.14)",
+                                    border: "1px solid rgba(239,68,68,0.35)",
+                                    color: "#f87171",
+                                    fontSize: "0.85rem",
+                                    fontWeight: 800,
+                                    opacity: deleting ? 0.7 : 1,
+                                }}
+                            >
+                                {deleting ? "Deleting..." : "Delete budget"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Inline edit form */}
             {editing && (
@@ -235,17 +321,11 @@ function BudgetCard({ budget, spent, onSave, onDelete, currencySymbol, currency,
                 </div>
             )}
 
-            {/* Stats */}
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", marginBottom: 10, color: "var(--text-muted)" }}>
-                <span>Spent: <strong style={{ color: over ? "#f87171" : "var(--text-primary)" }}>{formatAmount(spent)}</strong></span>
-                <span>Budget: <strong style={{ color: "var(--text-primary)" }}>{formatAmount(budget.amount)}</strong></span>
-                {over
-                    ? <span style={{ color: "#f87171", fontWeight: 600 }}>Over by {formatAmount(spent - budget.amount)}</span>
-                    : <span>Remaining: <strong style={{ color: "#34d399" }}>{formatAmount(budget.amount - spent)}</strong></span>
-                }
-            </div>
-
-            <ProgressBar spent={spent} budget={budget.amount} />
+            <BudgetProgressBar 
+                spent={spent} 
+                budget={budget.amount} 
+                month={formatBudgetMonth(budget.month)} 
+            />
         </div>
     );
 }
@@ -254,6 +334,7 @@ function BudgetCard({ budget, spent, onSave, onDelete, currencySymbol, currency,
 
 export default function BudgetPage() {
     const { formatAmount, currencySymbol, toUsdAmount, fromUsdAmount, currency } = useCurrency();
+    const dispatch = useAppDispatch();
 
     const [budgets, setBudgets] = useState<MonthlyBudget[]>([]);
     const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -263,26 +344,67 @@ export default function BudgetPage() {
     const [formMonth, setFormMonth] = useState(new Date().toISOString().slice(0, 7));
     const [formAmount, setFormAmount] = useState("");
     const [saving, setSaving] = useState(false);
+    const [loadingMonthBudget, setLoadingMonthBudget] = useState(false);
     const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+    const [budgetSearchMonth, setBudgetSearchMonth] = useState("");
+    const [searchedBudget, setSearchedBudget] = useState<MonthlyBudget | null>(null);
+    const [loadingBudgetSearch, setLoadingBudgetSearch] = useState(false);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [budgetRes, expenseRes] = await Promise.all([
-                fetch("/api/budget"),
-                fetch("/api/expenses"),
+            const [fetchedBudgets, fetchedExpenses] = await Promise.all([
+                dispatch(fetchBudgets()).unwrap(),
+                dispatch(fetchExpenses(undefined)).unwrap(),
             ]);
-            if (budgetRes.ok) {
-                const data = await budgetRes.json();
-                setBudgets(Array.isArray(data) ? data : [data]);
-            }
-            if (expenseRes.ok) setExpenses(await expenseRes.json());
+            setBudgets(fetchedBudgets);
+            setExpenses(fetchedExpenses.items);
         } catch { /* ignore */ } finally {
             setLoading(false);
         }
-    }, []);
+    }, [dispatch]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
+
+    const fetchBudgetByMonth = useCallback(async (month: string) => {
+        setLoadingBudgetSearch(true);
+        try {
+            setSearchedBudget(await dispatch(fetchBudget(month)).unwrap());
+        } catch {
+            setSearchedBudget(null);
+        } finally {
+            setLoadingBudgetSearch(false);
+        }
+    }, [dispatch]);
+
+    useEffect(() => {
+        if (budgetSearchMonth) {
+            void fetchBudgetByMonth(budgetSearchMonth);
+        }
+    }, [budgetSearchMonth, fetchBudgetByMonth]);
+
+    useEffect(() => {
+        if (!formMonth) return;
+
+        let active = true;
+        setLoadingMonthBudget(true);
+
+        dispatch(fetchBudget(formMonth)).unwrap()
+            .then((budget) => {
+                if (!active) return;
+                setFormAmount(budget.amount > 0 ? fromUsdAmount(budget.amount).toFixed(2) : "");
+            })
+            .catch(() => {
+                if (active) setFormAmount("");
+            })
+            .finally(() => {
+                if (active) setLoadingMonthBudget(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [dispatch, formMonth, fromUsdAmount]);
 
     // ── Add new budget ────────────────────────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
@@ -295,21 +417,15 @@ export default function BudgetPage() {
         setSaving(true);
         setMessage(null);
         try {
-            const res = await fetch("/api/budget", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ month: formMonth, amount: toUsdAmount(amount) }),
-            });
-            if (res.ok) {
-                setMessage({ type: "success", text: `Budget for ${formMonth} saved!` });
-                setFormAmount("");
-                await fetchData();
-            } else {
-                const err = await res.json();
-                setMessage({ type: "error", text: err.errors?.join(", ") || err.error || "Failed to save" });
+            await dispatch(setBudget({ month: formMonth, amount: toUsdAmount(amount) })).unwrap();
+            setMessage({ type: "success", text: `Budget for ${formMonth} saved!` });
+            setFormAmount("");
+            await fetchData();
+            if (budgetSearchMonth === formMonth) {
+                await fetchBudgetByMonth(formMonth);
             }
-        } catch {
-            setMessage({ type: "error", text: "Network error" });
+        } catch (err) {
+            setMessage({ type: "error", text: (err as Error).message || "Failed to save" });
         } finally {
             setSaving(false);
         }
@@ -317,24 +433,34 @@ export default function BudgetPage() {
 
     // ── Inline save (update existing) ────────────────────────────────────────
     const handleSave = async (month: string, newAmount: number) => {
-        await fetch("/api/budget", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ month, amount: newAmount }),
-        });
+        await dispatch(setBudget({ month, amount: newAmount })).unwrap();
         await fetchData();
+        if (budgetSearchMonth === month) {
+            await fetchBudgetByMonth(month);
+        }
     };
 
     // ── Delete budget ─────────────────────────────────────────────────────────
     const handleDelete = async (month: string) => {
-        await fetch(`/api/budget?month=${month}`, { method: "DELETE" });
+        await dispatch(deleteBudget(month)).unwrap();
         await fetchData();
+        if (budgetSearchMonth === month) {
+            setSearchedBudget({ month, amount: 0 });
+        }
     };
 
     const spentByMonth = (month: string) =>
         expenses.filter((e) => e.date.startsWith(month)).reduce((sum, e) => sum + e.amount, 0);
 
     const sortedBudgets = [...budgets].sort((a, b) => b.month.localeCompare(a.month));
+    const searchedBudgetExists =
+        searchedBudget !== null &&
+        (searchedBudget.amount > 0 || budgets.some((budget) => budget.month === searchedBudget.month));
+    const visibleBudgets = budgetSearchMonth
+        ? searchedBudgetExists && searchedBudget
+            ? [searchedBudget]
+            : []
+        : sortedBudgets;
 
     return (
         <main style={{ maxWidth: 860, margin: "0 auto", padding: "2rem 1.5rem" }}>
@@ -382,13 +508,14 @@ export default function BudgetPage() {
                             }}>{currencySymbol}</span>
                             <input
                                 type="number"
-                                placeholder="0.00"
+                                placeholder={loadingMonthBudget ? "Loading..." : "0.00"}
                                 step="0.01"
                                 min="0"
                                 value={formAmount}
                                 onChange={(e) => setFormAmount(e.target.value)}
+                                disabled={loadingMonthBudget}
                                 required
-                                style={inputStyle({ paddingLeft: 28 })}
+                                style={inputStyle({ paddingLeft: 28, opacity: loadingMonthBudget ? 0.7 : 1 })}
                                 onFocus={focusIn}
                                 onBlur={focusOut}
                             />
@@ -430,11 +557,50 @@ export default function BudgetPage() {
 
             {/* ── Budget list ── */}
             <div>
-                <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text-primary)", marginBottom: "1rem" }}>
-                    Budget Overview
-                </h2>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: "1rem" }}>
+                    <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                        Budget Overview
+                    </h2>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+                        <div style={{ minWidth: 150 }}>
+                            <FieldLabel>Search month</FieldLabel>
+                            <input
+                                type="month"
+                                value={budgetSearchMonth}
+                                onChange={(e) => {
+                                    setBudgetSearchMonth(e.target.value);
+                                    if (!e.target.value) setSearchedBudget(null);
+                                }}
+                                style={inputStyle({ colorScheme: "dark" })}
+                                onFocus={focusIn}
+                                onBlur={focusOut}
+                            />
+                        </div>
+                        {budgetSearchMonth && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setBudgetSearchMonth("");
+                                    setSearchedBudget(null);
+                                }}
+                                style={{
+                                    padding: "9px 14px",
+                                    borderRadius: 10,
+                                    cursor: "pointer",
+                                    background: "rgba(255,255,255,0.04)",
+                                    border: "1px solid var(--border-default)",
+                                    color: "var(--text-secondary)",
+                                    fontSize: "0.85rem",
+                                    fontWeight: 600,
+                                }}
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
+                </div>
 
-                {loading ? (
+                {loading || loadingBudgetSearch ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                         {[1, 2, 3].map((i) => (
                             <div key={i} style={{ borderRadius: 16, padding: "1.25rem 1.5rem", background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}>
@@ -443,20 +609,22 @@ export default function BudgetPage() {
                             </div>
                         ))}
                     </div>
-                ) : sortedBudgets.length === 0 ? (
+                ) : visibleBudgets.length === 0 ? (
                     <div style={{
                         background: "var(--glass-bg)", border: "1px solid var(--glass-border)",
                         borderRadius: 16, padding: "3rem", textAlign: "center",
                     }}>
                         <div style={{ fontSize: 48, marginBottom: 12 }}>📊</div>
-                        <p style={{ color: "var(--text-secondary)", fontSize: "1rem", fontWeight: 600 }}>No budgets set yet</p>
+                        <p style={{ color: "var(--text-secondary)", fontSize: "1rem", fontWeight: 600 }}>
+                            {budgetSearchMonth ? `No budget found for ${formatBudgetMonth(budgetSearchMonth)}` : "No budgets set yet"}
+                        </p>
                         <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", marginTop: 4 }}>
-                            Use the form above to set your first monthly budget
+                            {budgetSearchMonth ? "Clear the search or set a budget for this month above" : "Use the form above to set your first monthly budget"}
                         </p>
                     </div>
                 ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        {sortedBudgets.map((b) => (
+                        {visibleBudgets.map((b) => (
                             <BudgetCard
                                 key={b.month}
                                 budget={b}

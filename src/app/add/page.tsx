@@ -5,6 +5,8 @@ import { useState } from "react";
 import type { ExpenseCategory } from "@/types/expense";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useExpenseForm } from "@/hooks/useExpenseForm";
+import { useAppDispatch } from "@/hooks/useRedux";
+import { createExpense } from "@/store/expenseSlice";
 
 // ─── Category Config ──────────────────────────────────────────────────────────
 
@@ -60,9 +62,10 @@ const inputStyle: React.CSSProperties = {
 
 export default function AddExpensePage() {
     const router = useRouter();
+    const dispatch = useAppDispatch();
     const { currencySymbol, toUsdAmount, currency } = useCurrency();
 
-    const { values, errors, handleChange, handleSubmit: submitForm } = useExpenseForm();
+    const { values, errors, handleChange, handleSubmit: submitForm, reset } = useExpenseForm();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState("");
 
@@ -75,27 +78,19 @@ export default function AddExpensePage() {
             await submitForm(async (formData) => {
                 const usdAmount = toUsdAmount(formData.amount);
 
-                const res = await fetch("/api/expenses", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        title: formData.title,
-                        amount: usdAmount,
-                        category: formData.category,
-                        date: formData.date,
-                        note: formData.note,
-                    }),
-                });
+                await dispatch(createExpense({
+                    title: formData.title,
+                    amount: usdAmount,
+                    category: formData.category,
+                    date: formData.date,
+                    note: formData.note,
+                })).unwrap();
 
-                if (res.ok) {
-                    router.push("/expenses");
-                } else {
-                    const body = await res.json();
-                    setSubmitError(body.errors?.join(", ") || body.error || "Failed to add expense.");
-                }
+                reset();
+                router.push("/expenses");
             });
-        } catch {
-            setSubmitError("Network error. Please try again.");
+        } catch (err) {
+            setSubmitError((err as Error).message || "Failed to add expense.");
         } finally {
             setIsSubmitting(false);
         }
@@ -321,7 +316,10 @@ export default function AddExpensePage() {
                         </button>
                         <button
                             type="button"
-                            onClick={() => router.back()}
+                            onClick={() => {
+                                reset();
+                                router.back();
+                            }}
                             style={{
                                 padding: "12px 20px", borderRadius: 10,
                                 background: "rgba(255,255,255,0.04)",

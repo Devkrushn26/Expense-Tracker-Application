@@ -1,74 +1,71 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Expense } from "@/types/expense";
 import ExpenseCard from "@/components/ExpenseCard";
 import ExpenseFiltersBar from "@/components/ExpenseFiltersBar";
-import { useAppSelector } from "@/hooks/useRedux";
+import { useAppDispatch, useAppSelector } from "@/hooks/useRedux";
+import { useFilteredExpenses } from "@/hooks/useFilteredExpenses";
+import { deleteExpense, fetchExpenses } from "@/store/expenseSlice";
 
 const PAGE_SIZE = 5;
 
 export default function ExpenseListClient() {
     const router = useRouter();
+    const dispatch = useAppDispatch();
     const filters = useAppSelector((state) => state.expenses.filters);
-    const [expenses, setExpenses] = useState<Expense[]>([]);
+    const { filteredExpenses, count } = useFilteredExpenses();
     const [hasLoaded, setHasLoaded] = useState(false);
-    const [page, setPage] = useState(1);
+    const [pagination, setPagination] = useState({ page: 1, filterKey: "" });
     const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
     const [refreshKey, setRefreshKey] = useState(0);
+    const filterKey = useMemo(
+        () =>
+            JSON.stringify({
+                category: filters.category,
+                month: filters.month,
+                search: filters.search,
+                minAmount: filters.minAmount,
+                maxAmount: filters.maxAmount,
+            }),
+        [
+            filters.category,
+            filters.month,
+            filters.search,
+            filters.minAmount,
+            filters.maxAmount,
+        ]
+    );
+    const page = pagination.filterKey === filterKey ? pagination.page : 1;
+
+    const setCurrentPage = useCallback((updater: number | ((currentPage: number) => number)) => {
+        setPagination((current) => {
+            const currentPage = current.filterKey === filterKey ? current.page : 1;
+            const nextPage = typeof updater === "function" ? updater(currentPage) : updater;
+
+            return {
+                page: nextPage,
+                filterKey,
+            };
+        });
+    }, [filterKey]);
 
     useEffect(() => {
         let active = true;
-        const params = new URLSearchParams();
 
-        // Reset to page 1 when filters change
-        const shouldResetPage = page !== 1;
-        const currentPage = shouldResetPage ? 1 : page;
-        
-        params.set("page", String(currentPage));
-        params.set("pageSize", String(PAGE_SIZE));
-
-        if (filters.category && filters.category !== "all") {
-            params.set("category", filters.category);
-        }
-        if (filters.month) {
-            params.set("month", filters.month);
-        }
-        if (filters.search) {
-            params.set("search", filters.search);
-        }
-        if (filters.minAmount !== null) {
-            params.set("minAmount", String(filters.minAmount));
-        }
-        if (filters.maxAmount !== null) {
-            params.set("maxAmount", String(filters.maxAmount));
-        }
-
-        fetch(`/api/expenses?${params.toString()}`, { cache: "no-store" })
-            .then(async (res) => {
-                if (!res.ok) throw new Error("Failed to fetch expenses");
-                return res.json() as Promise<{
-                    items: Expense[];
-                    total: number;
-                    page: number;
-                    pageSize: number;
-                    totalPages: number;
-                }>;
-            })
+        dispatch(fetchExpenses({ ...filters, page, pageSize: PAGE_SIZE })).unwrap()
             .then((data) => {
                 if (!active) return;
-                setExpenses(data.items);
                 setTotal(data.total);
                 setTotalPages(data.totalPages);
                 if (data.page > data.totalPages) {
-                    setPage(data.totalPages);
+                    setCurrentPage(data.totalPages);
                 }
             })
             .catch(() => {
                 if (!active) return;
-                setExpenses([]);
                 setTotal(0);
                 setTotalPages(1);
             })
@@ -85,8 +82,12 @@ export default function ExpenseListClient() {
         filters.search,
         filters.minAmount,
         filters.maxAmount,
+        filters,
+        filterKey,
         page,
         refreshKey,
+        setCurrentPage,
+        dispatch,
     ]);
 
     const handleEdit = (expense: Expense) => {
@@ -95,11 +96,10 @@ export default function ExpenseListClient() {
 
     const handleDelete = async (id: string) => {
         try {
-            const res = await fetch(`/api/expenses/${id}`, { method: "DELETE" });
-            if (!res.ok) return;
+            await dispatch(deleteExpense(id)).unwrap();
 
-            if (expenses.length === 1 && page > 1) {
-                setPage((currentPage) => currentPage - 1);
+            if (filteredExpenses.length === 1 && page > 1) {
+                setCurrentPage((currentPage) => currentPage - 1);
                 return;
             }
 
@@ -112,14 +112,14 @@ export default function ExpenseListClient() {
             <ExpenseFiltersBar className="mb-6" />
 
             <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
-                Showing {expenses.length} of {total} expense{total !== 1 ? "s" : ""}
+                Showing {count} of {total} expense{total !== 1 ? "s" : ""}
             </p>
 
             {!hasLoaded ? (
                 <div className="glass-card p-10 text-center">
                     <p className="text-lg" style={{ color: 'var(--text-secondary)' }}>Loading expenses...</p>
                 </div>
-            ) : expenses.length === 0 ? (
+            ) : filteredExpenses.length === 0 ? (
                 <div className="glass-card p-10 text-center">
                     <p className="text-lg" style={{ color: 'var(--text-secondary)' }}>No expenses found</p>
                     <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
@@ -128,7 +128,7 @@ export default function ExpenseListClient() {
                 </div>
             ) : (
                 <div className="space-y-3">
-                    {expenses.map((expense) => (
+                    {filteredExpenses.map((expense) => (
                         <ExpenseCard
                             key={expense.id}
                             expense={expense}
@@ -143,7 +143,7 @@ export default function ExpenseListClient() {
                 <div className="mt-6 flex items-center justify-between gap-3">
                     <button
                         type="button"
-                        onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+                        onClick={() => setCurrentPage((currentPage) => Math.max(1, currentPage - 1))}
                         disabled={page === 1}
                         className="rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50"
                         style={{
@@ -161,7 +161,7 @@ export default function ExpenseListClient() {
 
                     <button
                         type="button"
-                        onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
+                        onClick={() => setCurrentPage((currentPage) => Math.min(totalPages, currentPage + 1))}
                         disabled={page === totalPages}
                         className="rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50"
                         style={{

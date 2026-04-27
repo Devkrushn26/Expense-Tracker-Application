@@ -8,9 +8,9 @@ import { supabase } from "@/lib/supabase/client";
 
 const CURRENCIES: { value: Currency; label: string; symbol: string }[] = [
   { value: "USD", label: "USD", symbol: "$" },
-  { value: "EUR", label: "EUR", symbol: "€" },
-  { value: "GBP", label: "GBP", symbol: "£" },
-  { value: "INR", label: "INR", symbol: "₹" },
+  { value: "EUR", label: "EUR", symbol: "\u20ac" },
+  { value: "GBP", label: "GBP", symbol: "\u00a3" },
+  { value: "INR", label: "INR", symbol: "\u20b9" },
 ];
 
 const NAV_LINKS = [
@@ -49,7 +49,7 @@ export default function Navbar() {
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between px-6 h-16">
         <Link href="/" className="flex items-center gap-2 group">
-          <span className="text-2xl">💰</span>
+          <span className="text-2xl">{"\ud83d\udcb0"}</span>
           <span
             className="text-lg font-bold bg-clip-text text-transparent"
             style={{ backgroundImage: "var(--gradient-brand)" }}
